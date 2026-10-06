@@ -3,41 +3,73 @@
 <style>
 :root{--bg:#f6f7fb;--card:#fff;--tx:#1d2433;--mut:#6b7385;--ac:#3b6cf6;--red:#d93b3b;--amb:#d98a1f}
 @media(prefers-color-scheme:dark){:root{--bg:#12151c;--card:#1c212c;--tx:#e8ebf2;--mut:#98a1b5}}
-body{margin:0;font:15px system-ui,sans-serif;background:var(--bg);color:var(--tx)}
-header{display:flex;gap:12px;align-items:center;padding:16px 20px;flex-wrap:wrap}
-h1{font-size:20px;margin:0;flex:1}main{display:grid;gap:16px;padding:0 20px 24px;grid-template-columns:repeat(auto-fit,minmax(300px,1fr))}
-.card{background:var(--card);border-radius:12px;padding:16px}h2{font-size:15px;margin:0 0 12px}
+*{box-sizing:border-box}body{margin:0;font:15px system-ui,sans-serif;background:var(--bg);color:var(--tx)}
+header{display:flex;gap:8px;align-items:center;padding:14px 16px;flex-wrap:wrap}
+h1{font-size:20px;margin:0;flex:1;min-width:140px}
+main{display:grid;gap:16px;padding:0 16px 24px;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr))}
+.card{background:var(--card);border-radius:12px;padding:16px;min-width:0}h2{font-size:15px;margin:0 0 12px}
 .big{font-size:32px;font-weight:700}.mut{color:var(--mut);font-size:13px}
-.bar{display:flex;align-items:center;gap:8px;margin:6px 0}.bar span{width:78px;font-size:12px;color:var(--mut);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.bar i{display:block;height:14px;background:var(--ac);border-radius:4px;min-width:2px}.bar b{font-size:12px;font-weight:500}
+.bar{display:flex;align-items:center;gap:8px;margin:6px 0}.bar span{width:90px;flex:none;font-size:12px;color:var(--mut);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bar i{display:block;height:14px;background:var(--ac);border-radius:4px;min-width:2px}.bar b{font-size:12px;font-weight:500;white-space:nowrap}
 .alert{padding:8px 0;border-top:1px solid #8884;display:flex;gap:8px;align-items:center}.alert:first-of-type{border:0}
 .pill{font-size:11px;padding:2px 8px;border-radius:99px;color:#fff}.high{background:var(--red)}.medium{background:var(--amb)}
-button,select{font:inherit;padding:6px 12px;border-radius:8px;border:1px solid #8886;background:var(--card);color:var(--tx);cursor:pointer}
-.warn{color:var(--red);font-weight:600}.u{flex:1;word-break:break-all;font-size:13px}.dim{opacity:.5}
+button,select,input{font:inherit;padding:8px 12px;border-radius:8px;border:1px solid #8886;background:var(--card);color:var(--tx);min-height:40px}
+button{cursor:pointer}input{min-width:0}.row{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}.row input{flex:1}
+.warn{color:var(--red);font-weight:600}.u{flex:1;word-break:break-all;font-size:13px;min-width:0}.dim{opacity:.5}
+code{background:#8883;padding:2px 6px;border-radius:4px;word-break:break-all}
+#login{max-width:340px;margin:15vh auto;padding:0 16px}#login .card{display:grid;gap:10px}
+[hidden]{display:none!important}
+@media(max-width:480px){.big{font-size:28px}.bar span{width:70px}header button{flex:1}}
 </style></head><body>
-<header><h1>🛡️ SafeWatch</h1><select id="kid"></select><button id="seed">Load demo data</button></header>
+<div id="login" hidden><div class="card"><h1>🛡️ SafeWatch</h1><div class="mut">Parent login</div>
+<input id="pw" type="password" placeholder="Password" autocomplete="current-password">
+<button id="go">Sign in</button><div id="err" class="warn"></div></div></div>
+<div id="app" hidden>
+<header><h1>🛡️ SafeWatch</h1><select id="kid" aria-label="Child"></select>
+<button id="add">+ Add child</button><button id="seed">Demo data</button><button id="out">Log out</button></header>
 <main>
 <div class="card"><h2>Today's screen time</h2><div class="big" id="today">–</div><div class="mut" id="limit"></div></div>
 <div class="card"><h2>Last 7 days</h2><div id="daily"></div></div>
 <div class="card"><h2>Most-used apps &amp; sites</h2><div id="top"></div></div>
 <div class="card"><h2>Unsafe content alerts <span id="badge" class="pill high" hidden></span></h2><div id="alerts"></div></div>
-</main>
+<div class="card"><h2>App time limits</h2><div id="limits"></div>
+<div class="row"><input id="ln" placeholder="App name (e.g. YouTube)"><input id="lm" type="number" min="1" placeholder="Minutes" style="max-width:110px"><button id="ls">Set</button></div></div>
+<div class="card"><h2>Connect a device</h2><div class="mut">Device agents send activity using this key:</div><p><code id="key">–</code></p>
+<div class="mut">Run: <code>python3 agent.py &lt;this-site-url&gt; &lt;key&gt;</code></div></div>
+</main></div>
 <script>
-const $=id=>document.getElementById(id),fmt=s=>{const m=Math.round(s/60);return m>=60?`${Math.floor(m/60)}h ${m%60}m`:`${m}m`};
-const api=(p,o)=>fetch('/api'+p,o).then(r=>r.json());
+const $=id=>document.getElementById(id),
+esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])),
+fmt=s=>{const m=Math.round(s/60);return m>=60?`${Math.floor(m/60)}h ${m%60}m`:`${m}m`};
+const showLogin=()=>{$('app').hidden=true;$('login').hidden=false};
+async function api(p,body){const r=await fetch('/api'+p,body===undefined?{}:{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+ if(r.status===401&&p!=='/login'){showLogin();throw new Error('auth')}return r.json()}
 const bars=(items,key,label)=>{const m=Math.max(...items.map(i=>i.sec),1);return items.map(i=>
- `<div class="bar"><span title="${i[key]}">${label?label(i):i[key]}</span><i style="width:${i.sec/m*60}%"></i><b>${fmt(i.sec)}</b></div>`).join('')||'<div class="mut">No data yet</div>'};
-async function loadKids(){const k=await api('/children');$('kid').innerHTML=k.map(c=>`<option value="${c.id}">${c.name}</option>`).join('');if(k.length)load()}
-async function load(){const id=$('kid').value;if(!id)return;
+ `<div class="bar"><span title="${esc(i[key])}">${esc(label?label(i):i[key])}</span><i style="width:${i.sec/m*55}%"></i><b>${fmt(i.sec)}</b></div>`).join('')||'<div class="mut">No data yet</div>'};
+async function init(){const me=await fetch('/api/me').then(r=>r.json());if(!me.logged_in)return showLogin();
+ $('login').hidden=true;$('app').hidden=false;loadKids()}
+async function loadKids(sel){const k=await api('/children');$('kid').innerHTML=k.map(c=>`<option value="${c.id}" data-key="${esc(c.device_key)}">${esc(c.name)}</option>`).join('');
+ if(sel)$('kid').value=sel;load()}
+async function load(){const id=$('kid').value;if(!id){$('key').textContent='–';return}
+ $('key').textContent=$('kid').selectedOptions[0].dataset.key||'–';
  const [s,a]=await Promise.all([api(`/children/${id}/summary`),api(`/children/${id}/alerts`)]);
  $('today').innerHTML=s.over_limit?`<span class="warn">${fmt(s.today_sec)}</span>`:fmt(s.today_sec);
  $('limit').textContent=`Daily limit: ${s.child.daily_limit_min} min`+(s.over_limit?' — exceeded':'');
  $('daily').innerHTML=bars(s.daily,'day',d=>d.day.slice(5));
  $('top').innerHTML=bars(s.top,'name',t=>(t.kind==='app'?'📱 ':'🌐 ')+t.name);
+ $('limits').innerHTML=s.limits.map(l=>`<div class="mut">${esc(l.name)}: ${fmt(l.used_sec)} / ${l.limit_min}m ${l.over?'<span class="warn">over limit</span>':''}</div>`).join('')||'<div class="mut">No app limits set</div>';
  $('badge').hidden=!s.unseen_alerts;$('badge').textContent=s.unseen_alerts+' new';
- $('alerts').innerHTML=a.map(x=>`<div class="alert ${Number(x.seen)?'dim':''}"><span class="pill ${x.severity}">${x.category}</span>
-  <span class="u">${x.url}<div class="mut">${new Date(x.ts).toLocaleString()}</div></span>
-  ${Number(x.seen)?'':`<button onclick="mark(${x.id})">Dismiss</button>`}</div>`).join('')||'<div class="mut">All clear ✅</div>'}
-async function mark(id){await api(`/alerts/${id}/seen`,{method:'POST'});load()}
-$('kid').onchange=load;$('seed').onclick=async()=>{await api('/seed',{method:'POST'});loadKids()};loadKids();
+ $('alerts').innerHTML=a.map(x=>`<div class="alert ${Number(x.seen)?'dim':''}"><span class="pill ${esc(x.severity)}">${esc(x.category)}</span>
+  <span class="u">${esc(x.url)}<div class="mut">${new Date(x.ts).toLocaleString()}</div></span>
+  ${Number(x.seen)?'':`<button onclick="mark(${+x.id})">Dismiss</button>`}</div>`).join('')||'<div class="mut">All clear ✅</div>'}
+async function mark(id){await api(`/alerts/${id}/seen`,{});load()}
+$('kid').onchange=load;
+$('seed').onclick=async()=>{const r=await api('/seed',{});loadKids(r.child_id)};
+$('add').onclick=async()=>{const n=prompt("Child's name?");if(!n)return;const l=prompt('Daily limit in minutes?','180');
+ const r=await api('/children',{name:n,daily_limit_min:+l||180});if(r.error)return alert(r.error);alert('Added! Device key: '+r.device_key);loadKids(r.id)};
+$('ls').onclick=async()=>{const r=await api(`/children/${$('kid').value}/limits`,{name:$('ln').value,limit_min:+$('lm').value});
+ if(r.error)return alert(r.error);$('ln').value=$('lm').value='';load()};
+$('out').onclick=async()=>{await api('/logout',{});showLogin()};
+const signin=async()=>{const r=await api('/login',{password:$('pw').value});if(r.ok){$('pw').value='';$('err').textContent='';init()}else $('err').textContent=r.error};
+$('go').onclick=signin;$('pw').addEventListener('keydown',e=>{if(e.key==='Enter')signin()});init();
 </script></body></html>
