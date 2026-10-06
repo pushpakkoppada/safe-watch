@@ -1,0 +1,43 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>SafeWatch</title>
+<style>
+:root{--bg:#f6f7fb;--card:#fff;--tx:#1d2433;--mut:#6b7385;--ac:#3b6cf6;--red:#d93b3b;--amb:#d98a1f}
+@media(prefers-color-scheme:dark){:root{--bg:#12151c;--card:#1c212c;--tx:#e8ebf2;--mut:#98a1b5}}
+body{margin:0;font:15px system-ui,sans-serif;background:var(--bg);color:var(--tx)}
+header{display:flex;gap:12px;align-items:center;padding:16px 20px;flex-wrap:wrap}
+h1{font-size:20px;margin:0;flex:1}main{display:grid;gap:16px;padding:0 20px 24px;grid-template-columns:repeat(auto-fit,minmax(300px,1fr))}
+.card{background:var(--card);border-radius:12px;padding:16px}h2{font-size:15px;margin:0 0 12px}
+.big{font-size:32px;font-weight:700}.mut{color:var(--mut);font-size:13px}
+.bar{display:flex;align-items:center;gap:8px;margin:6px 0}.bar span{width:78px;font-size:12px;color:var(--mut);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bar i{display:block;height:14px;background:var(--ac);border-radius:4px;min-width:2px}.bar b{font-size:12px;font-weight:500}
+.alert{padding:8px 0;border-top:1px solid #8884;display:flex;gap:8px;align-items:center}.alert:first-of-type{border:0}
+.pill{font-size:11px;padding:2px 8px;border-radius:99px;color:#fff}.high{background:var(--red)}.medium{background:var(--amb)}
+button,select{font:inherit;padding:6px 12px;border-radius:8px;border:1px solid #8886;background:var(--card);color:var(--tx);cursor:pointer}
+.warn{color:var(--red);font-weight:600}.u{flex:1;word-break:break-all;font-size:13px}.dim{opacity:.5}
+</style></head><body>
+<header><h1>🛡️ SafeWatch</h1><select id="kid"></select><button id="seed">Load demo data</button></header>
+<main>
+<div class="card"><h2>Today's screen time</h2><div class="big" id="today">–</div><div class="mut" id="limit"></div></div>
+<div class="card"><h2>Last 7 days</h2><div id="daily"></div></div>
+<div class="card"><h2>Most-used apps &amp; sites</h2><div id="top"></div></div>
+<div class="card"><h2>Unsafe content alerts <span id="badge" class="pill high" hidden></span></h2><div id="alerts"></div></div>
+</main>
+<script>
+const $=id=>document.getElementById(id),fmt=s=>{const m=Math.round(s/60);return m>=60?`${Math.floor(m/60)}h ${m%60}m`:`${m}m`};
+const api=(p,o)=>fetch('/api'+p,o).then(r=>r.json());
+const bars=(items,key,label)=>{const m=Math.max(...items.map(i=>i.sec),1);return items.map(i=>
+ `<div class="bar"><span title="${i[key]}">${label?label(i):i[key]}</span><i style="width:${i.sec/m*60}%"></i><b>${fmt(i.sec)}</b></div>`).join('')||'<div class="mut">No data yet</div>'};
+async function loadKids(){const k=await api('/children');$('kid').innerHTML=k.map(c=>`<option value="${c.id}">${c.name}</option>`).join('');if(k.length)load()}
+async function load(){const id=$('kid').value;if(!id)return;
+ const [s,a]=await Promise.all([api(`/children/${id}/summary`),api(`/children/${id}/alerts`)]);
+ $('today').innerHTML=s.over_limit?`<span class="warn">${fmt(s.today_sec)}</span>`:fmt(s.today_sec);
+ $('limit').textContent=`Daily limit: ${s.child.daily_limit_min} min`+(s.over_limit?' — exceeded':'');
+ $('daily').innerHTML=bars(s.daily,'day',d=>d.day.slice(5));
+ $('top').innerHTML=bars(s.top,'name',t=>(t.kind==='app'?'📱 ':'🌐 ')+t.name);
+ $('badge').hidden=!s.unseen_alerts;$('badge').textContent=s.unseen_alerts+' new';
+ $('alerts').innerHTML=a.map(x=>`<div class="alert ${Number(x.seen)?'dim':''}"><span class="pill ${x.severity}">${x.category}</span>
+  <span class="u">${x.url}<div class="mut">${new Date(x.ts).toLocaleString()}</div></span>
+  ${Number(x.seen)?'':`<button onclick="mark(${x.id})">Dismiss</button>`}</div>`).join('')||'<div class="mut">All clear ✅</div>'}
+async function mark(id){await api(`/alerts/${id}/seen`,{method:'POST'});load()}
+$('kid').onchange=load;$('seed').onclick=async()=>{await api('/seed',{method:'POST'});loadKids()};loadKids();
+</script></body></html>
